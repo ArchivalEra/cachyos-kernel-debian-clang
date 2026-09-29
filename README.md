@@ -11,7 +11,8 @@ GCC + `GENERIC_CPU`，**既没有 BORE 调度器，也没有 sched_ext、clang L
 
 - **BORE 调度器**（Burst-Oriented Response Enhancer）—— 来自 CachyOS `kernel-patches`
 - **clang + ThinLTO + `-O3`** 编译（非 GCC 通用构建）
-- `CONFIG_X86_NATIVE_CPU=y` —— 针对本机 CPU 指令集优化
+- `CONFIG_X86_NATIVE_CPU=y` → **CPU 要求：x86-64-v3（AVX2 + BMI2，Haswell/Zen1 及更新）**
+  （构建机为 Zen2，二进制使用 AVX2/BMI2 指令；如需通用内核请改用 `GENERIC_V3` 或 `GENERIC_CPU`）
 - `CONFIG_HZ=1000` / `PREEMPT_DYNAMIC` —— 桌面低延迟
 - ZSTD 压缩内核模块
 - BBRv2 / BBRv3 拥塞控制可选切换（见 `docs/`）

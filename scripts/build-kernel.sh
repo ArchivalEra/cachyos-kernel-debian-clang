@@ -48,7 +48,12 @@ cp "${WORK}/public-repo/config/config-${VER}-${PKGREL}-cachyos" .config
 make olddefconfig
 
 echo ">>> Building debs..."
-make bindeb-pkg
+# NOTE: scripts/Makefile.package hardcodes `-j1` in the dpkg-buildpackage
+# invocation. DPKG_FLAGS is appended after it, and dpkg-buildpackage honors the
+# last -j, so this overrides serial builds with full parallelism.
+JOBS="$(nproc)"
+export DEB_BUILD_OPTIONS="parallel=${JOBS}"
+make DPKG_FLAGS="-j${JOBS}" bindeb-pkg
 
 echo ">>> Done. Packages in ${SRC}/"
 ls -lh "${SRC}"/*.deb

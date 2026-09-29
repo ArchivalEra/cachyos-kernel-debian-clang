@@ -1,0 +1,17 @@
+Upstream source: https://github.com/CachyOS/linux
+Upstream releases: https://github.com/CachyOS/linux/releases
+
+For each released kernel package, the exact corresponding source tarball is:
+
+    cachyos-<KERNELVER>-<TAGREL>.tar.gz
+
+published at: https://github.com/CachyOS/linux/releases/download/cachyos-<KERNELVER>-<TAGREL>/
+
+Applied out-of-tree patch set (BORE scheduler, etc.):
+    https://github.com/CachyOS/kernel-patches (branch: master, directory <MAJOR.MINOR>/)
+
+The full build configuration used for every release is committed under config/
+in this repository. Rebuild instructions are in scripts/build-kernel.sh.
+
+Kernel license: GPL-2.0-only (see LICENSE-GPL-2.0)
+Repository scripts/docs license: AGPL-3.0-only (see LICENSE-AGPL-3.0)

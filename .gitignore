@@ -1,0 +1,7 @@
+*.deb
+*.tar.gz
+*.tar.xz
+*.zst
+build/
+output/
+linux-*/

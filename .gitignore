@@ -5,3 +5,7 @@
 build/
 output/
 linux-*/
+cachyos-*/
+ci-build/
+release/
+SHA256SUMS

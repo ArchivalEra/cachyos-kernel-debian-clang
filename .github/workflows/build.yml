@@ -1,0 +1,134 @@
+name: Build CachyOS kernel debs
+
+on:
+  workflow_dispatch:
+    inputs:
+      kernel_version:
+        description: "CachyOS kernel version to build, e.g. 7.3.4-1"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cachyos-kernel-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build and release kernel debs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve requested kernel version
+        id: ver
+        env:
+          REQUESTED_VERSION: ${{ inputs.kernel_version }}
+        run: |
+          set -euo pipefail
+          requested="$REQUESTED_VERSION"
+          version="${requested#cachyos-}"
+          if [ -z "$version" ]; then
+            echo "kernel_version input is required, e.g. 7.3.4-1" >&2
+            exit 1
+          fi
+          echo "Building requested version: $version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$version-cachyos" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether this version was already released
+        id: tag
+        run: |
+          set -euo pipefail
+          tag="${{ steps.ver.outputs.tag }}"
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+            echo "$tag already exists; skipping duplicate build"
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "$tag is new; starting build"
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install Debian build dependencies
+        if: steps.tag.outputs.exists == 'false'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            bc bison flex cpio fakeroot patch jq curl tar xz-utils zstd rsync \
+            gcc kmod python3 libdw-dev libssl-dev libelf-dev pahole \
+            dpkg-dev debhelper
+
+      - name: Install latest stable LLVM
+        if: steps.tag.outputs.exists == 'false'
+        run: |
+          set -euo pipefail
+          tag="$(curl -fsSL --retry 3 https://api.github.com/repos/llvm/llvm-project/releases/latest | jq -r '.tag_name')"
+          version="${tag#llvmorg-}"
+          echo "Latest LLVM release: $version"
+          curl -fL --retry 3 -o "$RUNNER_TEMP/llvm.tar.xz" \
+            "https://github.com/llvm/llvm-project/releases/download/${tag}/LLVM-${version}-Linux-X64.tar.xz"
+          mkdir -p "$RUNNER_TEMP/llvm"
+          tar -xJf "$RUNNER_TEMP/llvm.tar.xz" -C "$RUNNER_TEMP/llvm" --strip-components=1
+          echo "$RUNNER_TEMP/llvm/bin" >> "$GITHUB_PATH"
+
+      - name: Verify LLVM toolchain
+        if: steps.tag.outputs.exists == 'false'
+        run: |
+          set -euo pipefail
+          clang --version
+          ld.lld --version
+          llvm-ar --version
+          llvm-objcopy --version
+
+      - name: Build kernel .deb packages
+        if: steps.tag.outputs.exists == 'false'
+        env:
+          CPU_LEVEL: "3"
+        run: |
+          chmod +x scripts/build-kernel-ci.sh
+          bash scripts/build-kernel-ci.sh "${{ steps.ver.outputs.version }}"
+
+      - name: Generate SHA256SUMS
+        if: steps.tag.outputs.exists == 'false'
+        run: |
+          chmod +x scripts/make-sums.sh
+          bash scripts/make-sums.sh ci-build/packages ci-build/src
+
+      - name: Upload build artifacts
+        if: steps.tag.outputs.exists == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cachyos-kernel-debs-${{ steps.ver.outputs.version }}
+          path: |
+            ci-build/packages/*.deb
+            ci-build/packages/SHA256SUMS
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Create Git tag
+        if: steps.tag.outputs.exists == 'false'
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ steps.ver.outputs.tag }}" -m "CachyOS kernel ${{ steps.ver.outputs.version }}"
+          git push origin "${{ steps.ver.outputs.tag }}"
+
+      - name: Create GitHub Release
+        if: steps.tag.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="${{ steps.ver.outputs.tag }}"
+          version="${{ steps.ver.outputs.version }}"
+          gh release create "$tag" --verify-tag \
+            --title "CachyOS $tag (clang ThinLTO + O3 + BORE)" \
+            --notes "Automated Debian kernel build: BORE scheduler, clang + ThinLTO + O3, x86-64-v3. Kernel version: $version. Toolchain: latest stable LLVM at build time." \
+            ci-build/packages/*.deb ci-build/packages/SHA256SUMS

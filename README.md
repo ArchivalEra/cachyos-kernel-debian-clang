@@ -1,51 +1,73 @@
 # cachyos-kernel-debian-clang
 
-在 Debian 系发行版上，用 **clang + ThinLTO + O3** 从 [CachyOS 内核源码](https://github.com/CachyOS/linux)
-自编译 **BORE 调度器** 内核，并打包成 `apt` 可安装的 `.deb`。
+Build the [CachyOS kernel](https://github.com/CachyOS/linux) on Debian-based
+distributions with **clang + ThinLTO + O3**, package it as an `apt`-installable
+`.deb`, and get the **BORE scheduler** on Debian.
 
-本项目诞生的原因：现成的第三方 Debian 版 CachyOS 内核（如各类 GitHub CI 构建）普遍使用
-GCC + `GENERIC_CPU`，**既没有 BORE 调度器，也没有 sched_ext、clang LTO 和 O3 优化**，
-与 CachyOS 上游的桌面调优相差甚远。要保留完整特性，只能自己编。
+This project exists because the ready-made third-party Debian CachyOS kernels
+(such as various GitHub CI builds) generally use GCC with `GENERIC_CPU`. They
+lack the BORE scheduler, `sched_ext`, clang LTO, and O3 optimizations, so they
+are far from the upstream CachyOS desktop tuning. To keep the full feature set,
+you have to build it yourself.
 
-## 特性
+## Features
 
-- **BORE 调度器**（Burst-Oriented Response Enhancer）—— 来自 CachyOS `kernel-patches`
-- **clang + ThinLTO + `-O3`** 编译（非 GCC 通用构建）
-- `CONFIG_X86_NATIVE_CPU=y` → **CPU 要求：x86-64-v3（AVX2 + BMI2，Haswell/Zen1 及更新）**
-  （构建机为 Zen2，二进制使用 AVX2/BMI2 指令；如需通用内核请改用 `GENERIC_V3` 或 `GENERIC_CPU`）
-- `CONFIG_HZ=1000` / `PREEMPT_DYNAMIC` —— 桌面低延迟
-- ZSTD 压缩内核模块
-- BBRv2 / BBRv3 拥塞控制可选切换（见 `docs/`）
-- 完整 headers 包，可用于 DKMS（NVIDIA 驱动等）与外部模块编译
+- **BORE scheduler** — Burst-Oriented Response Enhancer, from CachyOS
+  `kernel-patches`
+- **clang + ThinLTO + `-O3`** build (not a generic GCC build)
+- **x86-64-v3 target** — released `.deb` packages are built with
+  `CONFIG_GENERIC_CPU=y` and `CONFIG_X86_64_VERSION=3` (AVX2 + BMI2,
+  Haswell/Zen1 or newer). CI overrides the committed native-CPU config so the
+  runner's `-march=native` cannot leak unsupported instructions.
+- `CONFIG_HZ=1000` / `PREEMPT_DYNAMIC` — low-latency desktop tuning
+- ZSTD-compressed kernel modules
+- Optional BBRv2 / BBRv3 congestion-control switching (see `docs/`)
+- Complete headers package for DKMS (NVIDIA driver, etc.) and external module
+  builds
 
-## 产物
+## CI builds
 
-每个 Release 提供以下 `.deb`：
+Kernel packages are built on demand with GitHub Actions. The workflow has no
+schedule and does not poll upstream automatically. To build a specific version,
+run **Actions → Build CachyOS kernel debs → Run workflow**, then enter the
+CachyOS release version, for example `7.3.4-1`.
 
-| 包 | 说明 |
+The workflow fetches the matching CachyOS source and BORE patch, installs the
+latest stable LLVM toolchain, builds the `.deb` packages, creates a
+`<version>-cachyos` tag, and publishes them as a GitHub Release. If that tag
+already exists, the workflow skips the duplicate build.
+
+## Artifacts
+
+Each Release provides the following `.deb` packages:
+
+| Package | Description |
 |---|---|
-| `linux-image-<ver>-cachyos_*.deb` | 内核镜像 + 模块 |
-| `linux-headers-<ver>-cachyos_*.deb` | 头文件（DKMS/外模块构建） |
-| `linux-image-<ver>-cachyos-dbg_*.deb` | 调试符号（可选，体积大） |
-| `linux-libc-dev_*.deb` | 用户空间头文件 |
+| `linux-image-<ver>-cachyos_*.deb` | Kernel image and modules |
+| `linux-headers-<ver>-cachyos_*.deb` | Headers for DKMS/external module builds |
+| `linux-image-<ver>-cachyos-dbg_*.deb` | Debug symbols (optional, large) |
+| `linux-libc-dev_*.deb` | User-space headers |
 
-所有 Release 均附带 `SHA256SUMS`。
+All Releases include `SHA256SUMS`.
 
-## 安装
+## Installation
 
 ```bash
 sudo apt install ./linux-image-*-cachyos_*.deb ./linux-headers-*-cachyos_*.deb
 sudo reboot
 ```
 
-> NVIDIA 用户：安装内核后，DKMS 会自动为新内核重建模块；或手动
-> `sudo dkms autoinstall`。
+> NVIDIA users: after installing the kernel, DKMS automatically rebuilds the
+> modules for the new kernel, or run `sudo dkms autoinstall` manually.
 
-## 许可
+## License
 
-- **构建脚本、文档、仓库工具**：AGPL-3.0-only（见 `LICENSE-AGPL-3.0`）
-- **内核本身及 `.deb` 产物**：GPL-2.0-only（Linux 内核许可证，见 `LICENSE-GPL-2.0`）
+- **Build scripts, docs, repository tooling**: AGPL-3.0-only (see
+  `LICENSE-AGPL-3.0`)
+- **The kernel itself and the resulting `.deb` artifacts**: GPL-2.0-only (Linux
+  kernel license, see `LICENSE-GPL-2.0`)
 
-由于内核以 GPL-2.0 发布，**Release 中的内核产物不可重新许可为 AGPL**；
-本仓库的 AGPL 许可仅覆盖原创脚本与文档。内核对应源码可从此仓库 `SOURCE.txt`
-所列上游地址获取。
+Because the kernel is released under GPL-2.0, **the kernel artifacts in a
+Release cannot be relicensed as AGPL**. The AGPL license in this repository
+covers only the original scripts and documentation. The corresponding kernel
+source is available from the upstream address listed in `SOURCE.txt`.
